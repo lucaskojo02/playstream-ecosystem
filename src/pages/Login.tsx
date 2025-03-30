@@ -1,24 +1,27 @@
 
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Film } from "lucide-react";
+import { Film, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [networkError, setNetworkError] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setNetworkError(false);
     
     if (!email || !password) {
       toast({
@@ -32,6 +35,12 @@ const Login = () => {
     setIsLoading(true);
     
     try {
+      // Check network connectivity first
+      if (!navigator.onLine) {
+        setNetworkError(true);
+        return;
+      }
+
       await login(email, password);
       toast({
         title: "Success",
@@ -39,11 +48,18 @@ const Login = () => {
       });
       navigate("/");
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Login Failed",
-        description: error.message || "Invalid email or password. Please try again.",
-      });
+      console.error("Login failed:", error);
+      
+      // Check if it's a network error
+      if (error.message === "Failed to fetch" || error.code === "NETWORK_ERROR" || !navigator.onLine) {
+        setNetworkError(true);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: error.message || "Invalid email or password. Please try again.",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -62,6 +78,16 @@ const Login = () => {
             Enter your credentials to access your account
           </p>
         </div>
+        
+        {networkError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Connection Error</AlertTitle>
+            <AlertDescription>
+              Unable to connect to the server. Please check your internet connection and try again.
+            </AlertDescription>
+          </Alert>
+        )}
         
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">

@@ -106,13 +106,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string): Promise<void> => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      // Check network connectivity first
+      if (!navigator.onLine) {
+        throw new Error("No internet connection. Please check your network and try again.");
+      }
+
+      // Use Promise.race to add a timeout
+      const loginPromise = supabase.auth.signInWithPassword({
         email,
         password,
       });
-
-      if (error) {
-        throw error;
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Login request timed out. Please try again.")), 15000);
+      });
+      
+      const result = await Promise.race([loginPromise, timeoutPromise]) as { error: any };
+      
+      if (result.error) {
+        throw result.error;
       }
     } catch (error) {
       console.error("Login failed:", error);
@@ -127,8 +139,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error("No internet connection. Please check your network and try again.");
       }
 
-      // First, sign up the user with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Use Promise.race to add a timeout
+      const registerPromise = supabase.auth.signUp({
         email,
         password,
         options: {
@@ -137,6 +149,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
       });
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Registration request timed out. Please try again.")), 15000);
+      });
+      
+      const { data: authData, error: authError } = await Promise.race([registerPromise, timeoutPromise]) as { 
+        data: any, 
+        error: any 
+      };
 
       if (authError) {
         throw authError;
