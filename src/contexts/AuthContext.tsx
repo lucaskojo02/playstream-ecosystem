@@ -122,10 +122,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (username: string, email: string, password: string): Promise<void> => {
     try {
+      // Check network connectivity first
+      if (!navigator.onLine) {
+        throw new Error("No internet connection. Please check your network and try again.");
+      }
+
       // First, sign up the user with Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            username
+          }
+        }
       });
 
       if (authError) {

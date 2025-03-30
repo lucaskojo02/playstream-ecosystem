@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 const Register = () => {
   const [username, setUsername] = useState("");
@@ -15,12 +17,14 @@ const Register = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [networkError, setNetworkError] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setNetworkError(false);
     
     if (!username || !email || !password || !confirmPassword) {
       toast({
@@ -50,11 +54,18 @@ const Register = () => {
       });
       navigate("/");
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Registration Failed",
-        description: error.message || "Could not create your account. Please try again.",
-      });
+      console.error("Registration failed:", error);
+      
+      // Check if it's a network error
+      if (error.message === "Failed to fetch" || error.code === "NETWORK_ERROR" || !navigator.onLine) {
+        setNetworkError(true);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Registration Failed",
+          description: error.message || "Could not create your account. Please try again.",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -73,6 +84,16 @@ const Register = () => {
             Sign up to get started with PlayStream
           </p>
         </div>
+        
+        {networkError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Connection Error</AlertTitle>
+            <AlertDescription>
+              Unable to connect to the server. Please check your internet connection and try again.
+            </AlertDescription>
+          </Alert>
+        )}
         
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
