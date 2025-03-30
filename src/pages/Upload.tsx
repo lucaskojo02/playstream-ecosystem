@@ -1,7 +1,6 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,9 +20,10 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert";
+import { supabase } from "@/integrations/supabase/client";
 
 const Upload = () => {
-  const { isAuthenticated } = useAuth();
+  const { loading: authLoading } = useRequireAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -36,11 +36,6 @@ const Upload = () => {
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
-
-  if (!isAuthenticated) {
-    navigate("/login");
-    return null;
-  }
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -85,7 +80,7 @@ const Upload = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!title.trim()) {
@@ -108,16 +103,36 @@ const Upload = () => {
     
     setUploading(true);
     
-    // Simulate upload
-    setTimeout(() => {
+    try {
+      // In a real implementation, we would upload files to Storage
+      // and create records in the database
+      
+      // For this demo, we'll just simulate success after a delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       toast({
         title: "Upload successful",
         description: "Your video has been uploaded and is now processing",
       });
-      setUploading(false);
       navigate("/");
-    }, 2000);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Upload failed",
+        description: error.message || "There was a problem uploading your video.",
+      });
+    } finally {
+      setUploading(false);
+    }
   };
+
+  if (authLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto">

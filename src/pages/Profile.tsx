@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,39 +13,36 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Edit, Save } from "lucide-react";
 
 const Profile = () => {
-  const { user, isAuthenticated, updateProfile } = useAuth();
+  // Use the auth protection hook
+  const { loading: authLoading } = useRequireAuth();
+  const { user, profile, isAuthenticated, updateProfile } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [bio, setBio] = useState("");
-  const [avatar, setAvatar] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate("/login");
-      return;
+    if (profile) {
+      setUsername(profile.username);
+      setEmail(profile.email);
+      setBio(profile.bio || "");
+      setAvatarUrl(profile.avatar_url || "");
     }
-    
-    if (user) {
-      setUsername(user.username);
-      setEmail(user.email);
-      setBio(user.bio || "");
-      setAvatar(user.avatar || "");
-    }
-  }, [user, isAuthenticated, navigate]);
+  }, [profile]);
 
-  const handleProfileUpdate = () => {
+  const handleProfileUpdate = async () => {
     setLoading(true);
     
     try {
-      updateProfile({
+      await updateProfile({
         username,
         bio,
-        avatar,
+        avatar_url: avatarUrl,
       });
       
       toast({
@@ -53,19 +51,23 @@ const Profile = () => {
       });
       
       setIsEditing(false);
-    } catch (error) {
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Update failed",
-        description: "Failed to update your profile. Please try again.",
+        description: error.message || "Failed to update your profile. Please try again.",
       });
     } finally {
       setLoading(false);
     }
   };
 
-  if (!user) {
-    return null;
+  if (authLoading || !user || !profile) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   return (
@@ -78,7 +80,7 @@ const Profile = () => {
       <div className="bg-card rounded-lg p-6 mb-8 shadow-sm">
         <div className="flex flex-col md:flex-row items-center gap-6 mb-6">
           <Avatar className="h-24 w-24">
-            <AvatarImage src={avatar} />
+            <AvatarImage src={avatarUrl} />
             <AvatarFallback>{username.charAt(0).toUpperCase()}</AvatarFallback>
           </Avatar>
           
@@ -134,8 +136,8 @@ const Profile = () => {
               <Label htmlFor="avatar">Avatar URL</Label>
               <Input
                 id="avatar"
-                value={avatar}
-                onChange={(e) => setAvatar(e.target.value)}
+                value={avatarUrl}
+                onChange={(e) => setAvatarUrl(e.target.value)}
                 placeholder="https://example.com/avatar.jpg"
               />
             </div>

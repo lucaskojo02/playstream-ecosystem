@@ -1,61 +1,119 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { User, Session } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 
-interface User {
+interface Profile {
   id: string;
   username: string;
   email: string;
-  avatar?: string;
+  avatar_url?: string;
   bio?: string;
 }
 
 interface AuthContextType {
   user: User | null;
+  profile: Profile | null;
   isAuthenticated: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
-  updateProfile: (data: Partial<User>) => void;
+  logout: () => Promise<void>;
+  updateProfile: (data: Partial<Profile>) => Promise<void>;
+  session: Session | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  profile: null,
   isAuthenticated: false,
   loading: true,
   login: async () => {},
   register: async () => {},
-  logout: () => {},
-  updateProfile: () => {},
+  logout: async () => {},
+  updateProfile: async () => {},
+  session: null,
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Check if user is logged in from localStorage
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+  // Fetch profile data
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        console.error("Error fetching profile:", error);
+        return null;
+      }
+
+      return data as Profile;
+    } catch (error) {
+      console.error("Error in fetchProfile:", error);
+      return null;
     }
-    setLoading(false);
+  };
+
+  useEffect(() => {
+    // Set up auth state listener first
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+
+        if (currentSession?.user) {
+          // Use setTimeout to avoid potential deadlock
+          setTimeout(async () => {
+            const profileData = await fetchProfile(currentSession.user.id);
+            setProfile(profileData);
+          }, 0);
+        } else {
+          setProfile(null);
+        }
+
+        setLoading(false);
+      }
+    );
+
+    // Then check for existing session
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+
+      if (currentSession?.user) {
+        fetchProfile(currentSession.user.id).then(profileData => {
+          setProfile(profileData);
+        });
+      }
+
+      setLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string): Promise<void> => {
-    // In a real app, you would make an API call to authenticate
     try {
-      // Mock login for now
-      const mockUser: User = {
-        id: "1",
-        username: email.split("@")[0],
+      const { error } = await supabase.auth.signInWithPassword({
         email,
-        avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=" + email,
-      };
-      setUser(mockUser);
-      localStorage.setItem("user", JSON.stringify(mockUser));
+        password,
+      });
+
+      if (error) {
+        throw error;
+      }
     } catch (error) {
       console.error("Login failed:", error);
       throw error;
@@ -63,33 +121,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (username: string, email: string, password: string): Promise<void> => {
-    // In a real app, you would make an API call to register
     try {
-      // Mock register for now
-      const mockUser: User = {
-        id: Math.random().toString(36).substring(2, 9),
-        username,
+      // First, sign up the user with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
-        avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=" + username,
-      };
-      setUser(mockUser);
-      localStorage.setItem("user", JSON.stringify(mockUser));
+        password,
+      });
+
+      if (authError) {
+        throw authError;
+      }
+
+      if (!authData.user) {
+        throw new Error("User creation failed");
+      }
+
+      // Then create their profile in the profiles table
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert({
+          id: authData.user.id,
+          username,
+          email,
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+        });
+
+      if (profileError) {
+        console.error("Profile creation failed:", profileError);
+        // If profile creation fails, we should try to delete the auth user
+        // This is a simplified approach - in production, you might want more robust cleanup
+        await supabase.auth.signOut();
+        throw profileError;
+      }
     } catch (error) {
       console.error("Registration failed:", error);
       throw error;
     }
   };
 
-  const logout = (): void => {
-    setUser(null);
-    localStorage.removeItem("user");
+  const logout = async (): Promise<void> => {
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Logout failed:", error);
+      throw error;
+    }
   };
 
-  const updateProfile = (data: Partial<User>): void => {
-    if (user) {
-      const updatedUser = { ...user, ...data };
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
+  const updateProfile = async (data: Partial<Profile>): Promise<void> => {
+    if (!user || !profile) {
+      throw new Error("User not authenticated");
+    }
+
+    try {
+      const updates = {
+        ...data,
+        id: user.id,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      // Update local state
+      setProfile({ ...profile, ...data });
+    } catch (error) {
+      console.error("Profile update failed:", error);
+      throw error;
     }
   };
 
@@ -97,12 +201,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
+        profile,
         isAuthenticated: !!user,
         loading,
         login,
         register,
         logout,
         updateProfile,
+        session,
       }}
     >
       {children}
