@@ -1,9 +1,9 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { 
   Search, Menu, Home, TrendingUp, 
-  Film, BookOpen, History, Clock, 
+  Film, BookOpen, History, 
   ThumbsUp, UserPlus, Upload, User, LogOut
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -26,6 +27,14 @@ const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile, isAuthenticated, logout } = useAuth();
+  const isMobile = useIsMobile();
+
+  // Close sidebar on mobile by default
+  useEffect(() => {
+    if (isMobile) {
+      setIsMenuOpen(false);
+    }
+  }, [isMobile]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,13 +56,15 @@ const Layout = () => {
       {/* Header */}
       <header className="flex items-center justify-between p-4 border-b bg-card">
         <div className="flex items-center gap-4">
-          <Button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            variant="ghost"
-            size="icon"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
+          {!isMobile && (
+            <Button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              variant="ghost"
+              size="icon"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+          )}
           <Link to="/" className="flex items-center gap-1">
             <Film className="h-6 w-6 text-primary" />
             <span className="text-xl font-bold">PlayStream</span>
@@ -116,59 +127,87 @@ const Layout = () => {
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <aside
-          className={`${
-            isMenuOpen ? "w-64" : "w-20"
-          } bg-card border-r transition-all duration-300 overflow-y-auto hide-scrollbar`}
-        >
-          <nav className="p-2">
-            <ul className="space-y-1">
-              {menuItems.map((item) => (
-                <li key={item.path}>
-                  <Link
-                    to={item.path}
-                    className={`flex items-center gap-3 p-3 rounded-lg ${
-                      location.pathname === item.path
-                        ? "bg-secondary text-foreground"
-                        : "text-muted-foreground hover:bg-secondary/50"
-                    }`}
-                  >
-                    <item.icon className="h-5 w-5" />
-                    {isMenuOpen && <span>{item.label}</span>}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+        {/* Sidebar - Hidden on mobile */}
+        {!isMobile && (
+          <aside
+            className={`${
+              isMenuOpen ? "w-64" : "w-20"
+            } bg-card border-r transition-all duration-300 overflow-y-auto hide-scrollbar hidden md:block`}
+          >
+            <nav className="p-2">
+              <ul className="space-y-1">
+                {menuItems.map((item) => (
+                  <li key={item.path}>
+                    <Link
+                      to={item.path}
+                      className={`flex items-center gap-3 p-3 rounded-lg ${
+                        location.pathname === item.path
+                          ? "bg-secondary text-foreground"
+                          : "text-muted-foreground hover:bg-secondary/50"
+                      }`}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      {isMenuOpen && <span>{item.label}</span>}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
 
-            {isAuthenticated && isMenuOpen && (
-              <>
-                <Separator className="my-4" />
-                <div className="p-4">
-                  <h3 className="font-medium text-sm mb-3">Subscriptions</h3>
-                  <div className="space-y-3">
-                    {/* Mock subscriptions */}
-                    {[1, 2, 3].map((id) => (
-                      <div key={id} className="flex items-center gap-3">
-                        <Avatar className="h-6 w-6">
-                          <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${id}`} />
-                          <AvatarFallback>C{id}</AvatarFallback>
-                        </Avatar>
-                        <span className="text-sm truncate">Channel {id}</span>
-                      </div>
-                    ))}
+              {isAuthenticated && isMenuOpen && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="p-4">
+                    <h3 className="font-medium text-sm mb-3">Subscriptions</h3>
+                    <div className="space-y-3">
+                      {/* Mock subscriptions */}
+                      {[1, 2, 3].map((id) => (
+                        <div key={id} className="flex items-center gap-3">
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${id}`} />
+                            <AvatarFallback>C{id}</AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm truncate">Channel {id}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
-          </nav>
-        </aside>
+                </>
+              )}
+            </nav>
+          </aside>
+        )}
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-6 bg-background">
           <Outlet />
         </main>
+
+        {/* Mobile Bottom Navigation */}
+        {isMobile && (
+          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t p-2 z-10">
+            <ul className="flex justify-around">
+              {menuItems.slice(0, 5).map((item) => (
+                <li key={item.path}>
+                  <Link
+                    to={item.path}
+                    className={`flex flex-col items-center justify-center p-2 ${
+                      location.pathname === item.path
+                        ? "text-primary"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    <item.icon className="h-5 w-5" />
+                    <span className="text-xs mt-1">{item.label}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
       </div>
+
+      {/* Add padding at the bottom on mobile to account for the navigation bar */}
+      {isMobile && <div className="h-16 md:hidden" />}
     </div>
   );
 };

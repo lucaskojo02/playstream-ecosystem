@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Film, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,13 +15,39 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [networkError, setNetworkError] = useState(false);
-  const { login } = useAuth();
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // If user is already authenticated, redirect to home
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/");
+    }
+  }, [isAuthenticated, navigate]);
+
+  // Check network status whenever visible
+  useEffect(() => {
+    const checkNetwork = () => {
+      setNetworkError(!navigator.onLine);
+    };
+    
+    checkNetwork();
+    
+    window.addEventListener('online', checkNetwork);
+    window.addEventListener('offline', checkNetwork);
+    
+    return () => {
+      window.removeEventListener('online', checkNetwork);
+      window.removeEventListener('offline', checkNetwork);
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setNetworkError(false);
+    setLoginError(null);
     
     if (!email || !password) {
       toast({
@@ -42,11 +68,13 @@ const Login = () => {
       }
 
       await login(email, password);
+      
       toast({
         title: "Success",
         description: "You have successfully logged in!",
       });
-      navigate("/");
+      
+      // Redirect will happen automatically due to auth state change
     } catch (error: any) {
       console.error("Login failed:", error);
       
@@ -54,6 +82,7 @@ const Login = () => {
       if (error.message === "Failed to fetch" || error.code === "NETWORK_ERROR" || !navigator.onLine) {
         setNetworkError(true);
       } else {
+        setLoginError(error.message || "Invalid email or password. Please try again.");
         toast({
           variant: "destructive",
           title: "Login Failed",
@@ -89,6 +118,14 @@ const Login = () => {
           </Alert>
         )}
         
+        {loginError && !networkError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Login Failed</AlertTitle>
+            <AlertDescription>{loginError}</AlertDescription>
+          </Alert>
+        )}
+        
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
@@ -99,6 +136,7 @@ const Login = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={isLoading}
             />
           </div>
           
@@ -116,6 +154,7 @@ const Login = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={isLoading}
             />
           </div>
           

@@ -68,6 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Set up auth state listener first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
+        console.log("Auth state changed:", event, currentSession?.user?.id);
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
 
@@ -87,6 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Then check for existing session
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      console.log("Initial session check:", currentSession?.user?.id);
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
 
@@ -111,6 +113,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error("No internet connection. Please check your network and try again.");
       }
 
+      console.log("Attempting login for:", email);
+      
       // Use Promise.race to add a timeout
       const loginPromise = supabase.auth.signInWithPassword({
         email,
@@ -121,11 +125,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTimeout(() => reject(new Error("Login request timed out. Please try again.")), 15000);
       });
       
-      const result = await Promise.race([loginPromise, timeoutPromise]) as { error: any };
+      const result = await Promise.race([loginPromise, timeoutPromise]) as { data: any, error: any };
       
       if (result.error) {
+        console.error("Login error:", result.error);
         throw result.error;
       }
+
+      console.log("Login successful for:", email);
     } catch (error) {
       console.error("Login failed:", error);
       throw error;
@@ -139,6 +146,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error("No internet connection. Please check your network and try again.");
       }
 
+      console.log("Starting registration for:", email);
+
       // Use Promise.race to add a timeout
       const registerPromise = supabase.auth.signUp({
         email,
@@ -146,12 +155,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         options: {
           data: {
             username
-          }
+          },
+          emailRedirectTo: window.location.origin
         }
       });
       
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Registration request timed out. Please try again.")), 15000);
+        setTimeout(() => reject(new Error("Registration request timed out. Please try again.")), 10000);
       });
       
       const { data: authData, error: authError } = await Promise.race([registerPromise, timeoutPromise]) as { 
@@ -160,12 +170,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       if (authError) {
+        console.error("Auth signup error:", authError);
         throw authError;
       }
 
       if (!authData.user) {
+        console.error("No user returned from signup");
         throw new Error("User creation failed");
       }
+
+      console.log("Auth signup successful, creating profile for:", authData.user.id);
 
       // Then create their profile in the profiles table
       const { error: profileError } = await supabase
@@ -180,10 +194,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (profileError) {
         console.error("Profile creation failed:", profileError);
         // If profile creation fails, we should try to delete the auth user
-        // This is a simplified approach - in production, you might want more robust cleanup
         await supabase.auth.signOut();
         throw profileError;
       }
+
+      console.log("Registration complete for:", email);
     } catch (error) {
       console.error("Registration failed:", error);
       throw error;

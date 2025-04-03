@@ -1,7 +1,7 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Film } from "lucide-react";
+import { Film, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +9,6 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
 
 const Register = () => {
   const [username, setUsername] = useState("");
@@ -18,13 +17,39 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [networkError, setNetworkError] = useState(false);
-  const { register } = useAuth();
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
+  const { register, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // If user is already authenticated, redirect to home
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/");
+    }
+  }, [isAuthenticated, navigate]);
+
+  // Check network status whenever visible
+  useEffect(() => {
+    const checkNetwork = () => {
+      setNetworkError(!navigator.onLine);
+    };
+    
+    checkNetwork();
+    
+    window.addEventListener('online', checkNetwork);
+    window.addEventListener('offline', checkNetwork);
+    
+    return () => {
+      window.removeEventListener('online', checkNetwork);
+      window.removeEventListener('offline', checkNetwork);
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setNetworkError(false);
+    setRegistrationError(null);
     
     if (!username || !email || !password || !confirmPassword) {
       toast({
@@ -47,12 +72,20 @@ const Register = () => {
     setIsLoading(true);
     
     try {
+      // Check network connectivity first
+      if (!navigator.onLine) {
+        setNetworkError(true);
+        return;
+      }
+
       await register(username, email, password);
+      
       toast({
         title: "Account created",
         description: "Your account has been created successfully!",
       });
-      navigate("/");
+      
+      // Redirect will happen automatically due to auth state change
     } catch (error: any) {
       console.error("Registration failed:", error);
       
@@ -60,6 +93,7 @@ const Register = () => {
       if (error.message === "Failed to fetch" || error.code === "NETWORK_ERROR" || !navigator.onLine) {
         setNetworkError(true);
       } else {
+        setRegistrationError(error.message || "Could not create your account. Please try again.");
         toast({
           variant: "destructive",
           title: "Registration Failed",
@@ -95,6 +129,14 @@ const Register = () => {
           </Alert>
         )}
         
+        {registrationError && !networkError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Registration Failed</AlertTitle>
+            <AlertDescription>{registrationError}</AlertDescription>
+          </Alert>
+        )}
+        
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="username">Username</Label>
@@ -104,6 +146,7 @@ const Register = () => {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
+              disabled={isLoading}
             />
           </div>
           
@@ -116,6 +159,7 @@ const Register = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={isLoading}
             />
           </div>
           
@@ -128,6 +172,7 @@ const Register = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={isLoading}
             />
           </div>
           
@@ -140,6 +185,7 @@ const Register = () => {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
+              disabled={isLoading}
             />
           </div>
           
